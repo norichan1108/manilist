@@ -1,0 +1,5 @@
+#!/bin/sh
+MANILISTPATH="/home/kazuhiron/projects/manilist"
+. $MANILISTPATH/.venv/bin/activate
+python $MANILISTPATH/manilist.py ${@}
+
