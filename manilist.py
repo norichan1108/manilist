@@ -101,7 +101,11 @@ def expand_info(infostr: str) -> RouteInfo:
     _info.routetime = _m_info.group(4)
     _info.capacity = float(_m_info.group(5))
     _info.servicetype = _m_info.group(6)
-    _info.dspcode = _m_info.group(7)
+    # '23/08/29 Nursary時にDSPコードにゴミがつくため取り除く処理の追加
+    # _info.dspcode = _m_info.group(7).split("&&")[0]
+    _info.dspcode = _m_info.group(7).split("&&")[0]
+
+
 
     return _info
 
