@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-
 import os
 import sys
 import re
 import codecs
 import argparse
 import pandas as pd
+import version
 
 SBS_DSP_CODE = r'8b6c9223-3e5f-421b-bd34-ca3926bd0cd3-PREFERRED'
 MARUWA_DSP_CODE = r'c2bb1e2b-d818-4246-baab-72cb9e1d5ba8-PREFERRED'
@@ -151,6 +151,8 @@ if __name__ == "__main__":
     #sys.stderr = codecs.getwriter('utf-8')(sys.stderr)
     _parser = argparse.ArgumentParser()
 
+    _parser.add_argument('--version', action='version', version=f'%(prog)s {version.VER_MAJOR}.{version.VER_MINOR}.{version.VER_BUILD}')
+
     _parser.add_argument('mode',
                         choices=['info', 'moreinfo', 'dump', 'dumpschedule'],
                         help='処理を選択します。(info=概要表示, dump=リスト表示)')
@@ -171,75 +173,95 @@ if __name__ == "__main__":
     _parser.add_argument('-a', '--showaddress',
                         action='store_true')
 
-    _args = _parser.parse_args()
-
-    # 入力ファイル名
-    if os.path.exists(_args.infile):
-        load_file(_args.infile)
-        _target_list = []
-        if _args.dspname == 'all':
-            # -tオプションはdspname='all'の時だけ検証
-            if _args.targetroutes is None:
-                # dspの指定が無く、かつ対象の指定が無いとき時
-                # 全てのコースを設定する
-                for _route_no in info_dict:
-                    _target_list.append(_route_no)
-            else:
-                # -tにて指定されたリストを反映(存在しないルートは設定しない)
-                for _targets in _args.targetroutes:
-                    for _route_no in _targets.split(','):
-                        if _route_no in info_dict:
-                            _target_list.append(_route_no)
-                        else:
-                            print(f'指定されたルート"{_route_no}"は存在しません。スキップします。', file=sys.stderr)
-        else:
-            # 特定のDSPが選択された時の処理
-            # DSP識別コードの取得
-            _dspcode = get_dspcode(_args.dspname)
-            _reject_list = []
-            if _args.targetroutes is not None:
-                for _rejects in _args.targetroutes:
-                    for _route_no in _rejects.split(','):
-                        if _route_no in info_dict:
-                            _reject_list.append(_route_no)
-                        else:
-                            print(f'指定されたルート"{_route_no}"は存在しません。スキップします。', file=sys.stderr)
-
-            for _route_no, _info in info_dict.items():
-                # DSPが一致するルートのみ対象
-                if _info.dspcode == _dspcode:
-                    if not _route_no in _reject_list:
-                        _target_list.append(_route_no)
-
-        if _args.mode == 'info':
-            print('Route, ItemCount')
-            for _route_no in _target_list:
-                print(",".join(
-                    [
-                        info_dict[_route_no].name,
-                        str(info_dict[_route_no].count)
-                    ])
-                )
-        elif _args.mode == 'moreinfo':
-            print('Route, ItemCount, ServiceType, PlanTime, RouteTime')
-            for _route_no in _target_list:
-
-                print(','.join(
-                    [
-                        info_dict[_route_no].name,
-                        str(info_dict[_route_no].count),
-                        info_dict[_route_no].servicetype,
-                        info_dict[_route_no].plantime,
-                        info_dict[_route_no].routetime
-                    ])
-                )
-        elif _args.mode == 'dump':
-            dump_targets(_target_list, not _args.noheader,
-                         _args.showtimewindow, _args.showaddress)
-        elif _args.mode == 'dumpschedule':
-            dump_schedule_targets(
-                _target_list, not _args.noheader, _args.showaddress)
+    try:
+        _args = _parser.parse_args()
+    except BaseException as e:
+        print(e)
     else:
-        print(f'ファイル"{_args.infile}"が見つかりません', file=sys.stderr)
+        # 入力ファイル名
+        if os.path.exists(_args.infile):
+            load_file(_args.infile)
+            _target_list = []
+            if _args.dspname == 'all':
+                # -tオプションはdspname='all'の時だけ検証
+                if _args.targetroutes is None:
+                    # dspの指定が無く、かつ対象の指定が無いとき時
+                    # 全てのコースを設定する
+                    for _route_no in info_dict:
+                        _target_list.append(_route_no)
+                else:
+                    # -tにて指定されたリストを反映(存在しないルートは設定しない)
+                    for _targets in _args.targetroutes:
+                        for _route_no in _targets.split(','):
+                            # 指定されたルートを正規表現フォーマットと見なしコンパイルする
+                            p = None
+                            try:
+                                p = re.compile(_route_no)
+                            except re.error as msg:
+                                print("error in option -t regix /%s/; %s" % (_route_no, str(msg)))
+                                continue
+                            # 正規表現に一致したルートを対象リストに追加する
+                            for _route_no in info_dict.keys():
+                                if p.match(_route_no):
+                                    _target_list.append(_route_no)
+                                #else:
+                                #    print(f'指定されたルート"{_route_no}"は存在しません。スキップします。', file=sys.stderr)
+            else:
+                # 特定のDSPが選択された時の処理
+                # DSP識別コードの取得
+                _dspcode = get_dspcode(_args.dspname)
+                _reject_list = []
+                if _args.targetroutes is not None:
+                    for _rejects in _args.targetroutes:
+                        for _route_no in _rejects.split(','):
+                            # 指定されたルートを正規表現フォーマットと見なしコンパイルする
+                            p = None
+                            try:
+                                p = re.compile(_route_no)
+                            except re.error as msg:
+                                print("error in option -t regix /%s/; %s" % (_route_no, str(msg)))
+                                continue
+                            # 正規表現に一致したルートを除外対象リストに追加する
+                            for _route_no in info_dict.keys():
+                                if p.match(_route_no):
+                                    _reject_list.append(_route_no)
+                                #else:
+                                #    print(f'指定されたルート"{_route_no}"は存在しません。スキップします。', file=sys.stderr)
+                for _route_no, _info in info_dict.items():
+                    # DSPが一致するルートのみ対象
+                    if _info.dspcode == _dspcode:
+                        if not _route_no in _reject_list:
+                            _target_list.append(_route_no)
+
+            if _args.mode == 'info':
+                print('Route, ItemCount')
+                for _route_no in _target_list:
+                    print(",".join(
+                        [
+                            info_dict[_route_no].name,
+                            str(info_dict[_route_no].count)
+                        ])
+                    )
+            elif _args.mode == 'moreinfo':
+                print('Route, ItemCount, ServiceType, PlanTime, RouteTime')
+                for _route_no in _target_list:
+
+                    print(','.join(
+                        [
+                            info_dict[_route_no].name,
+                            str(info_dict[_route_no].count),
+                            info_dict[_route_no].servicetype,
+                            info_dict[_route_no].plantime,
+                            info_dict[_route_no].routetime
+                        ])
+                    )
+            elif _args.mode == 'dump':
+                dump_targets(_target_list, not _args.noheader,
+                            _args.showtimewindow, _args.showaddress)
+            elif _args.mode == 'dumpschedule':
+                dump_schedule_targets(
+                    _target_list, not _args.noheader, _args.showaddress)
+        else:
+            print(f'ファイル"{_args.infile}"が見つかりません', file=sys.stderr)
 
     sys.exit()
